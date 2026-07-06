@@ -1,79 +1,63 @@
-# Mixtape
+# Mixtape 🎧
 
-A social music app where friends share songs, build collaborative playlists, and track listening stats.
+Mixtape is a social music app — friends share songs, build playlists together, rate what they hear, and keep tabs on who's listening right now. This repo is my submission for **Project 5: Mixtape Bug Hunt**, where the app shipped with five real bugs and the job was to find them, fix them, and explain why they happened.
 
-This is the starter repo for **Project 5: Mixtape Bug Hunt**. The app has five open issues in its tracker. Your job is to find, fix, and document at least three of them.
-
----
-
-## App Structure
-
-```
-ai201-project5-mixtape-starter/
-├── app.py                      # Flask app factory and DB setup
-├── models.py                   # SQLAlchemy models for all entities
-├── routes/
-│   ├── songs.py                # Song sharing, search, and rating routes
-│   ├── playlists.py            # Playlist creation and song management
-│   ├── users.py                # User profiles, streaks, notifications
-│   └── feed.py                 # Friends listening now, activity feed
-├── services/
-│   ├── streak_service.py       # Listening streak logic
-│   ├── feed_service.py         # Friends listening now feed logic
-│   ├── search_service.py       # Song search logic
-│   ├── notification_service.py # Notification creation and retrieval
-│   └── playlist_service.py     # Playlist retrieval logic
-├── tests/
-│   ├── test_streaks.py
-│   ├── test_search.py
-│   └── test_playlists.py
-├── seed_data.py                # Populates DB with test data
-├── requirements.txt
-└── .gitignore
-```
-
-The bugs live in the `services/` layer. The routes call services — if something is broken in an endpoint, trace it back to the service it calls.
+**Status: all 5 bugs fixed.** See [`submission.md`](submission.md) for the full write-up — codebase map, root cause analysis for each bug, and how AI tools were used along the way.
 
 ---
 
-## Setup
+## What's in here
 
-Create and activate a virtual environment:
+```
+mixtape-bughunt/
+├── app.py                      # Flask app factory + DB setup
+├── models.py                   # SQLAlchemy models (User, Song, Playlist, Notification, ...)
+├── routes/                     # Thin HTTP layer — parses requests, calls a service, shapes the response
+│   ├── songs.py                # share / search / rate songs
+│   ├── playlists.py            # create playlists, add & list songs
+│   ├── users.py                # profiles, streaks, notifications
+│   └── feed.py                 # "friends listening now" + activity feed
+├── services/                   # All the actual business logic lives here
+│   ├── streak_service.py       # listening streak math
+│   ├── feed_service.py         # who's listening now, recent activity
+│   ├── search_service.py       # song search
+│   ├── notification_service.py # notification creation + delivery
+│   └── playlist_service.py     # playlist song retrieval
+├── tests/                      # pytest suite, including a regression test I added
+├── seed_data.py                # populates the DB with realistic sample data
+└── requirements.txt
+```
+
+The pattern across the app: **routes are dumb, services are smart.** If something's broken at an endpoint, the fix is almost always in the matching `services/` file, not the route itself.
+
+---
+
+## Running it locally
 
 ```bash
+# 1. Create and activate a virtual environment
 python -m venv .venv
+source .venv/bin/activate          # macOS/Linux
+# .venv\Scripts\activate.bat       # Windows (cmd)
+# source .venv/Scripts/activate    # Windows (Git Bash)
 
-# macOS / Linux
-source .venv/bin/activate
-
-# Windows (Command Prompt)
-.venv\Scripts\activate.bat
-
-# Windows (Git Bash)
-source .venv/Scripts/activate
-```
-
-Install dependencies:
-
-```bash
+# 2. Install dependencies
 pip install -r requirements.txt
-```
 
-Seed the database with test data:
-
-```bash
+# 3. Seed the database with sample data
 python seed_data.py
-```
 
-Run the app:
-
-```bash
+# 4. Run the app
 FLASK_APP=app:create_app flask run
 ```
 
-> **macOS note:** If the app starts but requests hang or return connection refused, try `http://127.0.0.1:5000` instead of `http://localhost:5000`. On macOS, `localhost` sometimes resolves to an IPv6 address that Flask isn't listening on.
+The app will be live at **http://127.0.0.1:5000**.
 
-Run tests:
+> ⚠️ **Don't run `python app.py`** — it triggers a SQLAlchemy double-import error. Always start it with `FLASK_APP=app:create_app flask run`.
+>
+> 🍎 **On macOS**, use `127.0.0.1` instead of `localhost` — `localhost` can resolve to IPv6 and make requests hang.
+
+Run the test suite:
 
 ```bash
 pytest tests/
@@ -81,37 +65,29 @@ pytest tests/
 
 ---
 
-## The Five Open Issues
+## The five bugs (all fixed)
 
-| # | Title | Affected service |
-|---|-------|-----------------|
-| 1 | My listening streak keeps resetting | `streak_service.py` |
-| 2 | Friends Listening Now shows people from yesterday | `feed_service.py` |
-| 3 | The same song keeps showing up twice in search | `search_service.py` |
-| 4 | I got notified when a friend added my song to a playlist but not when they rated it | `notification_service.py` |
-| 5 | The last song in a playlist never shows up | `playlist_service.py` |
+| # | What users saw | Where it lived | Fixed in |
+|---|---|---|---|
+| 1 | Listening streaks kept resetting | `streak_service.py` | Sunday was wrongly excluded from the "consecutive day" check |
+| 2 | "Friends Listening Now" showed people from a day ago | `feed_service.py` | Recency window was 24 hours instead of a real "right now" window |
+| 3 | The same song showed up twice in search results | `search_service.py` | An unnecessary join fanned out one row per tag |
+| 4 | No notification when a friend rated your song (only when they added it to a playlist) | `notification_service.py` | The notify-the-sharer step was simply never written for ratings |
+| 5 | The last song in a playlist never appeared | `playlist_service.py` | An off-by-one slice (`songs[:-1]`) silently dropped it |
 
-Full issue descriptions are in the **Project 5 brief**. Read them carefully before opening any service file.
-
----
-
-## How to Read the Code
-
-Start with `models.py` to understand the data model. Then trace a feature through from its route to its service. For example:
-
-- A user rates a song → `POST /songs/<song_id>/rate` → `routes/songs.py` → `notification_service.rate_song()`
-- A user views a playlist → `GET /playlists/<id>/songs` → `routes/playlists.py` → `playlist_service.get_playlist_songs()`
-
-Understanding the full call chain is part of the exercise — don't skip to the service file directly.
+Full root cause analysis — how each bug was reproduced, traced, fixed, and verified — is in [`submission.md`](submission.md).
 
 ---
 
-## Submission
+## How a request flows through the app
 
-Create a branch named `bugfix/mixtape` for your fixes. Each bug fix should be its own commit using conventional format:
+Two examples, route → service → model:
 
-```
-fix: correct Sunday boundary condition in streak reset logic
-```
+- **Rating a song:** `POST /songs/<id>/rate` → `routes/songs.py` → `notification_service.rate_song()` → updates/creates a `Rating` row, then (after the fix) notifies the original sharer.
+- **Viewing a playlist:** `GET /playlists/<id>/songs` → `routes/playlists.py` → `playlist_service.get_playlist_songs()` → queries songs ordered by their `position` in the playlist.
 
-See the project brief for full submission requirements.
+---
+
+## Branch & commits
+
+All fixes live on `bugfix/mixtape`, one commit per bug, using conventional commit messages (`fix: ...`), plus one `test:` commit for the added regression test.
